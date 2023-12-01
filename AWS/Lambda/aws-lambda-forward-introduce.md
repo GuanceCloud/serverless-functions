@@ -1,21 +1,19 @@
 # 采集器「AWS-Lambda」配置手册
 
-通过 AWS 中的 Lambda 对 AWS 中的 EventBridge/CloudWatchLogs 数据进行抓取并上报到观测云日志中。
+通过 AWS 中的 Lambda 对 AWS 中的 S3 数据进行抓取并上报到观测云日志中。
 
-## 配置 EventBridge 
+## 为 ELB 创建访问日志
 
-1.打开 EventBridge 控制台，点击规则。
+1.创建 S3 存储桶
 
-2.点击创建规则，设置规则名称、描述，选择`具有事件模式的规则`。
+2.将策略附加到 S3 存储桶
 
-3.设置需要监听的事件源，如`Amazon 服务事件`或 `EventBridge 合作伙伴事件`，选择需要监听的事件模式。
+3.配置访问日志
 
-4.设置合适的目标类型
+4.确认存储桶权限
 
-5.配置标签
+### 具体步骤可看 https://docs.amazonaws.cn/elasticloadbalancing/latest/application/enable-access-logging.html
 
-6.创建规则
-    
 ## 配置 Lambda
 
 ### 使用控制台创建 Lambda 函数
@@ -34,21 +32,27 @@
 
 7.点击创建函数
 
-8.在 GitHub 中拉取同步代码至下方代码源中，并添加DATAKIT为datakit部署地址，点击`Depoly`
+8.在 GitHub 中拉取同步代码至下方代码源中 将 lambda-forward.py 内容复制到 lambda-function.py 中，同时将 settings 文件复制到代码源
+
+9.添加环境变量 DATAKIT_IP 为 datakit 部署地址，点击`Depoly`
 
 ### 配置 Lambda 触发器
 
 1.点击 `添加触发器`
 
-2.设置`选择一个源`为`EventBridge` 或 `CloudWatchLogs`
+2.设置`选择一个源`为`S3` 
 
-3.选择需要监听的`规则`/`日志组`，点击添加。
+3.选择需要监听的`bucket`
+
+4.选择要触发 Lambda 函数的事件 Event types
+
+5.同意 我承认不推荐对输入和输出使用相同的 S3 bucket，并且这种配置可能导致递归调用、增加 Lambda 使用和增加成本。
+
+6.点击添加
 
 ## X. 附录
 
 ### 操作所需最小权限
-
-有权在当前区域和 AWS 账户中创建 CloudWatch 日志组，以及创建日志流并将事件放入这些流中，所需权限列表
 
 logs: CreateLogGroup
 
@@ -57,3 +61,5 @@ logs: CreateLogStream
 logs: PutLogEvents
 
 lambda: *
+
+AmazonS3ReadOnlyAccess
