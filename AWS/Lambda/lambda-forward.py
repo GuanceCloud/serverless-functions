@@ -19,8 +19,8 @@ from setting import (
     CUSTOM_TAGS,
     SERVICE,
     HOST,
-    DATAKIT,
-    PORT,
+    DATAKIT_IP,
+    DATAKIT_PORT,
 )
 
 logger = logging.getLogger()
@@ -56,7 +56,7 @@ cloudtrail_regex = re.compile(
 def push_dk(data):
     http = urllib3.PoolManager()
     data = json.dumps(data)
-    response = http.request("POST", f'{DATAKIT}:{PORT}/v1/write/logging', body=data,
+    response = http.request("POST", f'{DATAKIT_IP}:{DATAKIT_PORT}/v1/write/logging', body=data,
                             headers={'Content-Type': 'application/json'})
     print('dk_code:', response.status)
 
@@ -80,7 +80,6 @@ def to_datakit_data(event):
         else:
             data['tags'][k] = str(v)
 
-    # data = ensure_str_fields(data)
     data = remove_blank_values(data)
     return data
 
@@ -101,15 +100,6 @@ def json_dumps(j, **kwargs):
         j = json.loads(j)
 
     return json.dumps(j, sort_keys=True, default=json_dumps_default, **kwargs)
-
-
-# def ensure_str_fields(data):
-#     # 将fields对应的值全部转成 string 类型
-#     for k in list(data['fields'].keys()):
-#         v = str(data['fields'][k])
-#         data['fields'][k] = v
-#
-#     return data
 
 
 def remove_blank_values(data):
@@ -144,11 +134,10 @@ def generate_metadata(context):
             "invoked_function_arn": context.invoked_function_arn,
         },
     }
-    # Add custom tags here by adding new value with the following format "key1:value1, key2:value2"  - might be subject to modifications
+    # 通过添加以下格式的新值“key1:value1，key2:value2”在此处添加自定义标记-可能会进行修改
     custom_tags_data = {
         "function_name": context.function_name.lower(),
         "memory_limit_in_mb": context.memory_limit_in_mb,
-        # "forwarder_version": context.function_version,
     }
 
     metadata[CUSTOM_TAGS] = ",".join(
@@ -178,15 +167,8 @@ def lambda_handler(event, context):
             events = s3_handler(event, context, metadata)
         elif event_type == "awslogs":
             events = awslogs_handler(event, context, metadata)
-        # elif event_type == "events":
-        #     events = cwevent_handler(event, metadata)
-        # elif event_type == "sns":
-        #     events = sns_handler(event, metadata)
-        # 目前不支持 kinesis
-        # elif event_type == "kinesis":
-        #     events = kinesis_awslogs_handler(event, context, metadata)
+
     except Exception as e:
-        # Logs through the socket the error
         err_message = "Error parsing the object. Exception: {} for event {}".format(
             str(e), event
         )
@@ -221,15 +203,20 @@ def convert_rule_to_nested_json(rule):
 
 
 def parse_aws_waf_logs(event):
-    """Parse out complex arrays of objects in AWS WAF logs
+    """
+    解析出AWS WAF日志中的复杂对象数组
 
-    Attributes to convert:
-        httpRequest.headers
-        nonTerminatingMatchingRules
-        rateBasedRuleList
-        ruleGroupList
+    要转换的属性：
 
-    This prevents having an unparsable array of objects in the final log.
+    httpRequest.headers
+
+    非终止匹配规则
+
+    rateBasedRuleList
+
+    ruleGroupList
+
+    这样可以防止在最终日志中出现无法解析的对象数组。
     """
     if isinstance(event, str):
         try:
@@ -254,8 +241,8 @@ def parse_aws_waf_logs(event):
     if headers:
         message["httpRequest"]["headers"] = convert_rule_to_nested_json(headers)
 
-    # Iterate through rules in ruleGroupList and nest them under the group id
-    # ruleGroupList has three attributes that need to be handled separately
+    # 遍历ruleGroupList中的规则，并将它们嵌套在组id下
+    # ruleGroupList有三个属性需要分别处理
     rule_groups = message.get("ruleGroupList", {})
     if rule_groups and isinstance(rule_groups, list):
         message["ruleGroupList"] = {}
@@ -266,7 +253,7 @@ def parse_aws_waf_logs(event):
             if group_id not in message["ruleGroupList"]:
                 message["ruleGroupList"][group_id] = {}
 
-            # Extract the terminating rule and nest it under its own id
+            # 提取终止规则并将其嵌套在自己的id下
             if "terminatingRule" in rule_group and rule_group["terminatingRule"]:
                 terminating_rule = rule_group.pop("terminatingRule", None)
                 if not "terminatingRule" in message["ruleGroupList"][group_id]:
@@ -275,7 +262,7 @@ def parse_aws_waf_logs(event):
                     convert_rule_to_nested_json(terminating_rule)
                 )
 
-            # Iterate through array of non-terminating rules and nest each under its own id
+            # 遍历非终止规则数组，并将每个规则嵌套在自己的id下
             if "nonTerminatingMatchingRules" in rule_group and isinstance(
                     rule_group["nonTerminatingMatchingRules"], list
             ):
@@ -293,7 +280,7 @@ def parse_aws_waf_logs(event):
                     "nonTerminatingMatchingRules"
                 ].update(convert_rule_to_nested_json(non_terminating_rules))
 
-            # Iterate through array of excluded rules and nest each under its own id
+            # 遍历排除的规则数组，并将每个规则嵌套在自己的id下
             if "excludedRules" in rule_group and isinstance(
                     rule_group["excludedRules"], list
             ):
@@ -319,10 +306,12 @@ def parse_aws_waf_logs(event):
 
 
 def separate_security_hub_findings(event):
-    """Replace Security Hub event with series of events based on findings
+    """
+    将Security Hub事件替换为基于调查结果的一系列事件
 
-    Each event should contain one finding only.
-    This prevents having an unparsable array of objects in the final log.
+    每个事件应仅包含一个查找。
+
+    这样可以防止在最终日志中出现无法解析的对象数组。
     """
     if event.get(SOURCE) != "securityhub" or not event.get("detail", {}).get(
             "findings"
@@ -330,27 +319,27 @@ def separate_security_hub_findings(event):
         return None
     events = []
     event_copy = copy.deepcopy(event)
-    # Copy findings before separating
+    # 分离前复制结果
     findings = event_copy.get("detail", {}).get("findings")
     if findings:
-        # Remove findings from the original event once we have a copy
+        # 一旦我们有了副本，就从原始事件中删除调查结果
         del event_copy["detail"]["findings"]
-        # For each finding create a separate log event
+        # 为每个查找创建一个单独的日志事件
         for index, item in enumerate(findings):
-            # Copy the original event with source and other metadata
+            # 复制带有源和其他元数据的原始事件
             new_event = copy.deepcopy(event_copy)
             current_finding = findings[index]
-            # Get the resources array from the current finding
+            # 从当前查找中获取资源数组
             resources = current_finding.get("Resources", {})
             new_event["detail"]["finding"] = current_finding
             new_event["detail"]["finding"]["resources"] = {}
-            # Separate objects in resources array into distinct attributes
+            # 将资源阵列中的对象分离为不同的属性
             if resources:
-                # Remove from current finding once we have a copy
+                # 一旦我们有了副本，就从当前查找中删除
                 del current_finding["Resources"]
                 for item in resources:
                     current_resource = item
-                    # Capture the type and use it as the distinguishing key
+                    # 捕获类型并将其用作区分键
                     resource_type = current_resource.get("Type", {})
                     del current_resource["Type"]
                     new_event["detail"]["finding"]["resources"][
@@ -361,16 +350,12 @@ def separate_security_hub_findings(event):
 
 
 def parse_lambda_tags_from_arn(arn):
-    """Generate the list of lambda tags based on the data in the arn
-
-    Args:
-        arn (str): Lambda ARN.
-            ex: arn:aws:lambda:us-east-1:172597598159:function:my-lambda[:optional-version]
     """
-    # Cap the number of times to split
+    基于arn中的数据生成lambda标记的列表
+    """
     split_arn = arn.split(":")
 
-    # If ARN includes version / alias at the end, drop it
+    # 如果ARN在末尾包含版本/别名，将其删除
     if len(split_arn) > 7:
         split_arn = split_arn[:7]
 
@@ -379,63 +364,56 @@ def parse_lambda_tags_from_arn(arn):
     return [
         "region:{}".format(region),
         "account_id:{}".format(account_id),
-        # Include the aws_account tag to match the aws.lambda CloudWatch metrics
         "aws_account:{}".format(account_id),
         "functionname:{}".format(function_name),
     ]
 
 
 def get_enriched_lambda_log_tags(log_event):
-    """Retrieves extra tags from lambda, either read from the function arn, or by fetching lambda tags from the function itself.
-
-    Args:
-        log (dict<str, str | dict | int>): a log parsed from the event in the split method
     """
-    # Note that this arn attribute has been lowercased already
+    从lambda中检索额外的标记，可以从函数arn读取，也可以从函数本身获取lambda标记。
+    """
+    # 请注意，此arn属性已被降低了大小写
     log_function_arn = log_event.get("lambda", {}).get("arn")
 
     if not log_function_arn:
         return []
     tags_from_arn = parse_lambda_tags_from_arn(log_function_arn)
-    # lambda_custom_tags = account_lambda_custom_tags_cache.get(log_function_arn)
-
-    # Combine and dedup tags
-    # tags = list(set(tags_from_arn + lambda_custom_tags))
     tags = list(set(tags_from_arn))
     return tags
 
 
 def add_metadata_to_lambda_log(event):
-    """Mutate log dict to add tags, host, and service metadata
+    """
+    更改日志dict以添加标记、主机和服务元数据
 
-    * tags for functionname, aws_account, region
-    * host from the Lambda ARN
-    * service from the Lambda name
+        *functionname、aws_account、region的标记
 
-    If the event arg is not a Lambda log then this returns without doing anything
+        *Lambda ARN的主机
 
-    Args:
-        event (dict): the event we are adding Lambda metadata to
+        *Lambda名称的服务
+
+    如果事件arg不是Lambda日志，则返回时不执行任何操作
+
+    Args：
+
+    event（dict）：我们将Lambda元数据添加到的事件
     """
     lambda_log_metadata = event.get("lambda", {})
     lambda_log_arn = lambda_log_metadata.get("arn")
 
-    # Do not mutate the event if it's not from Lambda
+    # 如果事件不是来自Lambda，请不要对其进行转换
     if not lambda_log_arn:
         return
 
-    # Set Lambda ARN to "host"
     event[HOST] = lambda_log_arn
 
-    # Function name is the seventh piece of the ARN
     function_name = lambda_log_arn.split(":")[6]
     tags = [f"functionname:{function_name}"]
 
-    # Get custom tags of the Lambda function
+    # 获取Lambda函数的自定义标记
     custom_lambda_tags = get_enriched_lambda_log_tags(event)
 
-    # Set the `service` tag and metadata field. If the Lambda function is
-    # tagged with a `service` tag, use it, otherwise use the function name.
     service_tag = next(
         (tag for tag in custom_lambda_tags if tag.startswith("service:")),
         f"service:{function_name}",
@@ -443,8 +421,6 @@ def add_metadata_to_lambda_log(event):
     tags.append(service_tag)
     event[SERVICE] = service_tag.split(":")[1]
 
-    # Check if one of the Lambda's custom tags is env
-    # If an env tag exists, remove the env:none placeholder
     custom_env_tag = next(
         (tag for tag in custom_lambda_tags if tag.startswith("env:")), None
     )
@@ -453,21 +429,22 @@ def add_metadata_to_lambda_log(event):
 
     tags += custom_lambda_tags
 
-    # Dedup tags, so we don't end up with functionname twice
+    # Dedup标记，这样我们就不会两次使用 function name
     tags = list(set(tags))
-    tags.sort()  # Keep order deterministic
+    tags.sort()  # 保持订单确定性
 
     event[CUSTOM_TAGS] = ",".join([event[CUSTOM_TAGS]] + tags)
 
 
 def extract_tags_from_message(event):
-    """When the logs intake pipeline detects a `message` field with a
-    JSON content, it extracts the content to the top-level. The fields
-    of same name from the top-level will be overridden.
+    """
+    当日志获取管道检测到带有的“消息”字段时
+    JSON内容，它将内容提取到顶层。字段
+    顶级中相同名称的将被覆盖。
 
-    E.g. the application adds some tags to the log, which appear in the
-    `message.tags` field, and the forwarder adds some common tags, such
-    as `aws_account`, which appear in the top-level `ddtags` field:
+    例如，应用程序将一些标记添加到日志中，这些标记显示在
+    `message.tags'字段，转发器添加一些常见的标记，例如
+    作为`aws_account`，出现在顶级`tags'字段中：
 
     {
         "message": {
@@ -478,11 +455,8 @@ def extract_tags_from_message(event):
         ...
     }
 
-    Only the custom tags added by the application will be kept.
-
-    We might want to change the intake pipeline to "merge" the conflicting
-    fields rather than "overridding" in the future, but for now we should
-    extract `message.tags` and merge it with the top-level `tags` field.
+    只有应用程序添加的自定义标记才会保留。
+    但现在我们应该提取 message.tags 并将其与顶级 tags 字段合并。
     """
     if "message" in event and CUSTOM_TAGS in event["message"]:
         if isinstance(event["message"], dict):
@@ -500,11 +474,12 @@ def extract_tags_from_message(event):
 
 
 def extract_host_from_cloudtrails(event):
-    """Extract the hostname from cloudtrail events userIdentity.arn field if it
-    matches AWS hostnames.
+    """
+    从cloudtrail events userIdentity.arn 字段中提取主机名，如果
 
-    In case of s3 events the fields of the event are not encoded in the
-    "message" field, but in the event object itself.
+    与 AWS 主机名匹配。
+    在 s3 事件的情况下，事件的字段不会编码在
+    message 字段，但在事件对象本身中。
     """
 
     if event is not None and event.get(SOURCE) == "cloudtrail":
@@ -516,7 +491,7 @@ def extract_host_from_cloudtrails(event):
                 logger.debug("Failed to decode cloudtrail message")
                 return
 
-        # deal with s3 input type events
+        # 处理s3输入类型事件
         if not message:
             message = event
 
@@ -554,7 +529,9 @@ def extract_host_from_route53(event):
 
 
 def split(events):
-    """Split events into metrics, logs, and trace payloads"""
+    """
+    拆分日志 并把 tags 内容提取出到顶层
+    """
     logs = []
     for event in events:
         logs.append(event)
@@ -572,16 +549,14 @@ def split(events):
             f"Extracted  {len(logs)} logs"
         )
 
-    # return metrics, logs, trace_payloads
     return logs
 
 
 def transform(events):
-    """Performs transformations on complex events
-
-    Ex: handles special cases with nested arrays of JSON objects
-    Args:
-        events (dict[]): the list of event dicts we want to transform
+    """
+    对复杂事件执行转换，例如：使用JSON对象的嵌套数组处理特殊情况
+    Args：
+    events（dict[]）：我们要转换的事件dict的列表
     """
     for event in reversed(events):
         findings = separate_security_hub_findings(event)
@@ -597,10 +572,11 @@ def transform(events):
 
 
 def enrich(events):
-    """Adds event-specific tags and attributes to each event
+    """
+    向每个事件添加特定于事件的标记和属性
 
     Args:
-        events (dict[]): the list of event dicts we want to enrich
+        events (dict[]): 丰富的事件列表
     """
     for event in events:
         add_metadata_to_lambda_log(event)
@@ -623,19 +599,19 @@ def normalize_events(events, metadata):
         elif isinstance(event, str):
             normalized.append(merge_dicts({"message": event}, metadata))
         else:
-            # drop this log
             continue
 
     return normalized
 
 
 def parse_event_type(event):
+    """
+    判断日志类型
+    """
     if "Records" in event and len(event["Records"]) > 0:
         if "s3" in event["Records"][0]:
             return "s3"
         elif "Sns" in event["Records"][0]:
-            # it's not uncommon to fan out s3 notifications through SNS,
-            # should treat it as an s3 event rather than sns event.
             sns_msg = event["Records"][0]["Sns"]["Message"]
             try:
                 sns_msg_dict = json.loads(sns_msg)
@@ -684,7 +660,6 @@ def s3_handler(event, context, metadata):
     body = response["Body"]
     data = body.read()
 
-    # Decompress data that has a .gz extension or magic header http://www.onicos.com/staff/iz/formats/gzip.html
     if key[-3:] == ".gz" or data[:2] == b"\x1f\x8b":
         with gzip.GzipFile(fileobj=BytesIO(data)) as decompress_stream:
             data = b"".join(BufferedReader(decompress_stream))
@@ -716,9 +691,8 @@ def s3_handler(event, context, metadata):
                 )
         split_data = data.splitlines()
 
-        # Send lines to Datadog
         for line in split_data:
-            # Create structured object and send it
+            # 创建结构化对象并发送
             structured_line = {
                 "aws": {"s3": {"bucket": bucket, "key": key}},
                 "message": line,
@@ -726,34 +700,10 @@ def s3_handler(event, context, metadata):
             yield structured_line
 
 
-def sns_handler(event, metadata):
-    data = event
-    # Set the source on the log
-    metadata[SOURCE] = "sns"
-
-    for ev in data["Records"]:
-        # Create structured object and send it
-        structured_line = ev
-        yield structured_line
-
-
-def cwevent_handler(event, metadata):
-    data = event
-
-    # Set the source on the log
-    source = data.get("source", "cloudwatch")
-    service = source.split(".")
-    if len(service) > 1:
-        metadata[SOURCE] = service[1]
-    else:
-        metadata[SOURCE] = "cloudwatch"
-
-    metadata[SERVICE] = get_service_from_tags(metadata)
-
-    yield data
-
-
 def merge_dicts(a, b, path=None):
+    """
+    将 b 的内容填充到 a 相同的 key 里面
+    """
     if path is None:
         path = []
     for key in b:
@@ -761,7 +711,7 @@ def merge_dicts(a, b, path=None):
             if isinstance(a[key], dict) and isinstance(b[key], dict):
                 merge_dicts(a[key], b[key], path + [str(key)])
             elif a[key] == b[key]:
-                pass  # same leaf value
+                pass
             else:
                 raise Exception(
                     "Conflict while merging metadatas and the log entry at %s"
@@ -774,16 +724,16 @@ def merge_dicts(a, b, path=None):
 
 def parse_service_arn(source, key, bucket, context):
     if source == "elb":
-        # For ELB logs we parse the filename to extract parameters in order to rebuild the ARN
-        # 1. We extract the region from the filename
-        # 2. We extract the loadbalancer name and replace the "." by "/" to match the ARN format
-        # 3. We extract the id of the loadbalancer
-        # 4. We build the arn
+        # 对于ELB日志，解析文件名以提取参数，从而重建ARN
+        # 1. 从文件名中提取 region
+        # 2. 提取 loadbalancer Name，并将“.”替换为“/”以匹配ARN格式
+        # 3. 提取 loadbalancer Id
+        # 4. 构建 arn
         idsplit = key.split("/")
         if not idsplit:
             logger.debug("Invalid service ARN, unable to parse ELB ARN")
             return
-        # If there is a prefix on the S3 bucket, remove the prefix before splitting the key
+        # 如果S3存储桶上有前缀，在拆分密钥之前删除前缀
         if idsplit[0] != "AWSLogs":
             try:
                 idsplit = idsplit[idsplit.index("AWSLogs"):]
@@ -791,7 +741,7 @@ def parse_service_arn(source, key, bucket, context):
             except ValueError:
                 logger.debug("Invalid S3 key, doesn't contain AWSLogs")
                 return
-        # If no prefix, split the key
+        # 如果没有前缀，则拆分密钥
         else:
             keysplit = key.split("_")
         if len(keysplit) > 3:
@@ -805,14 +755,14 @@ def parse_service_arn(source, key, bucket, context):
                     partition, region, idvalue, elbname
                 )
     if source == "s3":
-        # For S3 access logs we use the bucket name to rebuild the arn
+        # 对于S3访问日志，使用bucket名称来重建arn
         if bucket:
             return "arn:aws:s3:::{}".format(bucket)
     if source == "cloudfront":
-        # For Cloudfront logs we need to get the account and distribution id from the lambda arn and the filename
-        # 1. We extract the cloudfront id  from the filename
-        # 2. We extract the AWS account id from the lambda arn
-        # 3. We build the arn
+        # 对于Cloudfront日志，我们需要从lambda arn 和文件名中获取 account 和 distribution id
+        # 1. 从文件名中提取cloudfront id
+        # 2. 从lambda arn中提取AWS帐户id
+        # 3. 构建 arn
         namesplit = key.split("/")
         if len(namesplit) > 0:
             filename = namesplit[len(namesplit) - 1]
@@ -828,11 +778,11 @@ def parse_service_arn(source, key, bucket, context):
                         awsaccountID, distributionID
                     )
     if source == "redshift":
-        # For redshift logs we leverage the filename to extract the relevant information
-        # 1. We extract the region from the filename
-        # 2. We extract the account-id from the filename
-        # 3. We extract the name of the cluster
-        # 4. We build the arn: arn:aws:redshift:region:account-id:cluster:cluster-name
+        # 对于 redshift 日志，利用文件名提取相关信息
+        # 1. 从文件名中提取 region
+        # 2. 从文件名中提取 account-id
+        # 3. 提取集群的名称
+        # 4. 构建arn:an:aws:redshift:region:account-id:cluster:cluster-name
         namesplit = key.split("/")
         if len(namesplit) == 8:
             region = namesplit[3].lower()
@@ -848,6 +798,10 @@ def parse_service_arn(source, key, bucket, context):
 
 
 def get_partition_from_region(region):
+    """
+    获取分区
+    aws-us-gov｜aws-cn
+    """
     partition = "aws"
     if region:
         if GOV in region:
@@ -864,31 +818,29 @@ def get_service_from_tags(metadata):
         if tag.startswith("service:"):
             return tag[8:]
 
-    # Default service to source value
     return metadata[SOURCE]
 
 
 def awslogs_handler(event, context, metadata):
-    # Get logs
+    # 获取日志
     with gzip.GzipFile(
             fileobj=BytesIO(base64.b64decode(event["awslogs"]["data"]))
     ) as decompress_stream:
-        # Reading line by line avoid a bug where gzip would take a very long
-        # time (>5min) for file around 60MB gzipped
+        # 逐行读取可以避免出现gzip需要很长时间的错误
+        # 文件大小约为60MB的时间（>5分钟）gzipped
         data = b"".join(BufferedReader(decompress_stream))
     logs = json.loads(data)
-    # Set the source on the logs
+    # 在日志上设置源
     source = logs.get("logGroup", "cloudwatch")
 
-    # Use the logStream to identify if this is a CloudTrail event
-    # i.e. 123456779121_CloudTrail_us-east-1
+    # 使用logStream确定这是否是CloudTrail事件
     if "_CloudTrail_" in logs["logStream"]:
         source = "cloudtrail"
     if "tgw-attach" in logs["logStream"]:
         source = "transitgateway"
     metadata[SOURCE] = parse_event_source(event, source)
 
-    # Build aws attributes
+    # 构建aws属性
     aws_attributes = {
         "aws": {
             "awslogs": {
@@ -899,10 +851,10 @@ def awslogs_handler(event, context, metadata):
         }
     }
 
-    # Set service from custom tags, which may include the tags set on the log group
+    # 从自定义标记设置服务，其中可能包括在日志组上设置的标记
     metadata[SERVICE] = get_service_from_tags(metadata)
 
-    # Set host as log group where cloudwatch is source
+    # 将主机设置为cloudwatch所在的日志组
     if metadata[SOURCE] == "cloudwatch" or metadata.get(HOST, None) == None:
         metadata[HOST] = aws_attributes["aws"]["awslogs"]["logGroup"]
 
@@ -932,8 +884,8 @@ def awslogs_handler(event, context, metadata):
             logger.debug(
                 "Unable to set stepfunction host or get state_machine_arn: %s" % e
             )
-    # When parsing rds logs, use the cloudwatch log group name to derive the
-    # rds instance name, and add the log name of the stream ingested
+    # 在解析rds日志时，使用cloudwatch日志组名称来派生
+    # rds实例名称，并添加摄入的流的日志名称
     if metadata[SOURCE] in ["rds", "mariadb", "mysql", "postgresql"]:
         match = rds_regex.match(logs["logGroup"])
         if match is not None:
@@ -942,20 +894,20 @@ def awslogs_handler(event, context, metadata):
                     metadata[CUSTOM_TAGS] + ",logname:" + match.group("name")
             )
 
-    # For Lambda logs we want to extract the function name,
-    # then rebuild the arn of the monitored lambda using that name.
-    # Start by splitting the log group to get the function name
+    # 对于Lambda日志，提取函数名称
+    # 然后使用该名称重新生成受监控lambda的arn。
+    # 首先拆分日志组以获取函数名称
     if metadata[SOURCE] == "lambda":
         log_group_parts = logs["logGroup"].split("/lambda/")
         if len(log_group_parts) > 1:
             lowercase_function_name = log_group_parts[1].lower()
-            # Split the arn of the forwarder to extract the prefix
+            # 拆分转发器的arn以提取前缀
             arn_parts = context.invoked_function_arn.split("function:")
             if len(arn_parts) > 0:
                 arn_prefix = arn_parts[0]
-                # Rebuild the arn with the lowercased function name
+                # 使用小写的函数名重新生成arn
                 lowercase_arn = arn_prefix + "function:" + lowercase_function_name
-                # Add the lowercased arn as a log attribute
+                # 将带下划线的arn添加为日志属性
                 arn_attributes = {"lambda": {"arn": lowercase_arn}}
                 aws_attributes = merge_dicts(aws_attributes, arn_attributes)
 
@@ -963,13 +915,12 @@ def awslogs_handler(event, context, metadata):
                         metadata[CUSTOM_TAGS].startswith("env:")
                         or ",env:" in metadata[CUSTOM_TAGS]
                 )
-                # If there is no env specified, default to env:none
+                # 如果未指定env，则默认为env:none
                 if not env_tag_exists:
                     metadata[CUSTOM_TAGS] += ",env:none"
 
-    # The EKS log group contains various sources from the K8S control plane.
-    # In order to have these automatically trigger the correct pipelines they
-    # need to send their events with the correct log source.
+    # EKS日志组包含来自K8S控制平面的各种源。
+    # 为了让这些自动触发正确，他们需要使用正确的日志源发送其事件。
     if metadata[SOURCE] == "eks":
         if logs["logStream"].startswith("kube-apiserver-audit-"):
             metadata[SOURCE] = "kubernetes.audit"
@@ -981,9 +932,9 @@ def awslogs_handler(event, context, metadata):
             metadata[SOURCE] = "kube-controller-manager"
         elif logs["logStream"].startswith("authenticator-"):
             metadata[SOURCE] = "aws-iam-authenticator"
-        # In case the conditions above don't match we maintain eks as the source
+        # 如果上述条件不匹配，将eks作为源
 
-    # Create and send structured logs to Datadog
+    # 创建结构化日志并将其发送
     for log in logs["logEvents"]:
         yield merge_dicts(log, aws_attributes)
 
@@ -1000,7 +951,7 @@ def parse_event_source(event, key):
     if "awslogs" in event:
         return find_cloudwatch_source(lowercase_key)
 
-    # Determines if the key matches any known sources for S3 logs
+    # 确定密钥是否与S3日志的任何已知源匹配
     if "Records" in event and len(event["Records"]) > 0:
         if "s3" in event["Records"][0]:
             if is_cloudtrail(str(key)):
@@ -1017,7 +968,7 @@ def is_cloudtrail(key):
 
 
 def find_cloudwatch_source(log_group):
-    # e.g. /aws/rds/instance/my-mariadb/error
+    # For Example /aws/rds/instance/my-mariadb/error
     if log_group.startswith("/aws/rds"):
         for engine in ["mariadb", "mysql", "postgresql"]:
             if engine in log_group:
@@ -1026,12 +977,12 @@ def find_cloudwatch_source(log_group):
 
     if log_group.startswith(
             (
-                    # default location for rest api execution logs
-                    "api-gateway",  # e.g. Api-Gateway-Execution-Logs_xxxxxx/dev
-                    # default location set by serverless framework for rest api access logs
-                    "/aws/api-gateway",  # e.g. /aws/api-gateway/my-project
-                    # default location set by serverless framework for http api logs
-                    "/aws/http-api",  # e.g. /aws/http-api/my-project
+                    # rest api执行日志的默认位置
+                    "api-gateway",  # For Example Api-Gateway-Execution-Logs_xxxxxx/dev
+                    # 无服务器框架为restapi访问日志设置的默认位置
+                    "/aws/api-gateway",  # For Example /aws/api-gateway/my-project
+                    # 无服务器框架为http api日志设置的默认位置
+                    "/aws/http-api",  # For Example /aws/http-api/my-project
             )
     ):
         return "apigateway"
@@ -1039,15 +990,15 @@ def find_cloudwatch_source(log_group):
     if log_group.startswith("/aws/vendedlogs/states"):
         return "stepfunction"
 
-    # e.g. dms-tasks-test-instance
+    # For Example dms-tasks-test-instance
     if log_group.startswith("dms-tasks"):
         return "dms"
 
-    # e.g. sns/us-east-1/123456779121/SnsTopicX
+    # For Example sns/us-east-1/123456779121/SnsTopicX
     if log_group.startswith("sns/"):
         return "sns"
 
-    # e.g. /aws/fsx/windows/xxx
+    # For Example /aws/fsx/windows/xxx
     if log_group.startswith("/aws/fsx/windows"):
         return "aws.fsx"
 
@@ -1055,16 +1006,16 @@ def find_cloudwatch_source(log_group):
         return "appsync"
 
     for source in [
-        "/aws/lambda",  # e.g. /aws/lambda/helloDatadog
-        "/aws/codebuild",  # e.g. /aws/codebuild/my-project
-        "/aws/kinesis",  # e.g. /aws/kinesisfirehose/dev
-        "/aws/docdb",  # e.g. /aws/docdb/yourClusterName/profile
-        "/aws/eks",  # e.g. /aws/eks/yourClusterName/profile
+        "/aws/lambda",  # For Example /aws/lambda/helloTest
+        "/aws/codebuild",  # For Example /aws/codebuild/my-project
+        "/aws/kinesis",  # For Example /aws/kinesisfirehose/dev
+        "/aws/docdb",  # For Example /aws/docdb/yourClusterName/profile
+        "/aws/eks",  # For Example /aws/eks/yourClusterName/profile
     ]:
         if log_group.startswith(source):
             return source.replace("/aws/", "")
 
-    # the below substrings must be in your log group to be detected
+    # 以下子字符串必须在您的日志组中才能被检测
     for source in [
         "network-firewall",
         "route53",
@@ -1083,23 +1034,23 @@ def find_cloudwatch_source(log_group):
 
 
 def find_s3_source(key):
-    # e.g. AWSLogs/123456779121/elasticloadbalancing/us-east-1/2020/10/02/123456779121_elasticloadbalancing_us-east-1_app.alb.xxxxx.xx.xxx.xxx_x.log.gz
+    # For Example AWSLogs/123456779121/elasticloadbalancing/us-east-1/2020/10/02/123456779121_elasticloadbalancing_us-east-1_app.alb.xxxxx.xx.xxx.xxx_x.log.gz
     if "elasticloadbalancing" in key:
         return "elb"
 
-    # e.g. AWSLogs/123456779121/vpcflowlogs/us-east-1/2020/10/02/123456779121_vpcflowlogs_us-east-1_fl-xxxxx.log.gz
+    # For Example AWSLogs/123456779121/vpcflowlogs/us-east-1/2020/10/02/123456779121_vpcflowlogs_us-east-1_fl-xxxxx.log.gz
     if "vpcflowlogs" in key:
         return "vpc"
 
-    # e.g. AWSLogs/123456779121/vpcdnsquerylogs/vpc-********/2021/05/11/vpc-********_vpcdnsquerylogs_********_20210511T0910Z_71584702.log.gz
+    # For Example AWSLogs/123456779121/vpcdnsquerylogs/vpc-********/2021/05/11/vpc-********_vpcdnsquerylogs_********_20210511T0910Z_71584702.log.gz
     if "vpcdnsquerylogs" in key:
         return "route53"
 
-    # e.g. 2020/10/02/21/aws-waf-logs-testing-1-2020-10-02-21-25-30-x123x-x456x or AWSLogs/123456779121/WAFLogs/us-east-1/xxxxxx-waf/2022/10/11/14/10/123456779121_waflogs_us-east-1_xxxxx-waf_20221011T1410Z_12756524.log.gz
+    # For Example 2020/10/02/21/aws-waf-logs-testing-1-2020-10-02-21-25-30-x123x-x456x or AWSLogs/123456779121/WAFLogs/us-east-1/xxxxxx-waf/2022/10/11/14/10/123456779121_waflogs_us-east-1_xxxxx-waf_20221011T1410Z_12756524.log.gz
     if "aws-waf-logs" in key or "waflogs" in key:
         return "waf"
 
-    # e.g. AWSLogs/123456779121/redshift/us-east-1/2020/10/21/123456779121_redshift_us-east-1_mycluster_userlog_2020-10-21T18:01.gz
+    # For Example AWSLogs/123456779121/redshift/us-east-1/2020/10/21/123456779121_redshift_us-east-1_mycluster_userlog_2020-10-21T18:01.gz
     if "_redshift_" in key:
         return "redshift"
 
@@ -1107,11 +1058,11 @@ def find_s3_source(key):
     if "amazon_documentdb" in key:
         return "docdb"
 
-    # e.g. carbon-black-cloud-forwarder/alerts/org_key=*****/year=2021/month=7/day=19/hour=18/minute=15/second=41/8436e850-7e78-40e4-b3cd-6ebbc854d0a2.jsonl.gz
+    # For Example carbon-black-cloud-forwarder/alerts/org_key=*****/year=2021/month=7/day=19/hour=18/minute=15/second=41/8436e850-7e78-40e4-b3cd-6ebbc854d0a2.jsonl.gz
     if "carbon-black" in key:
         return "carbonblack"
 
-    # the below substrings must be in your target prefix to be detected
+    # 以下子字符串必须位于要检测的目标前缀中
     for source in [
         "amazon_codebuild",
         "amazon_kinesis",

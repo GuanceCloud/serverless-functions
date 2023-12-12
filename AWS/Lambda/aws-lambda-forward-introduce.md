@@ -2,7 +2,7 @@
 
 通过 AWS 中的 Lambda 对 AWS 中的 S3 数据进行抓取并上报到观测云日志中。
 
-## 为 ELB 创建访问日志
+## 例如日志源为 ALB 时创建访问日志打到 S3
 
 1.创建 S3 存储桶
 
@@ -34,7 +34,11 @@
 
 8.在 GitHub 中拉取同步代码至下方代码源中 将 lambda-forward.py 内容复制到 lambda-function.py 中，同时将 settings 文件复制到代码源
 
-9.添加环境变量 DATAKIT_IP 为 datakit 部署地址，点击`Depoly`
+9.添加环境变量 DATAKIT_IP 为 datakit 部署地址。
+
+10.如果 datakit 端口不是默认的 `9529` 可添加环境变量 DATAKIT_PORT 填写为正确的端口地址（`此变量非必填`）
+
+11.点击 `Depoly` 发布
 
 ### 配置 Lambda 触发器
 

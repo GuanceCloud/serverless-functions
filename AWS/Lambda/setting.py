@@ -25,5 +25,5 @@ HOST = "host"
 SOURCE = "source"
 CUSTOM_TAGS = "tags"
 TAGS = get_env_var("TAGS", "")
-DATAKIT = get_env_var("DATAKIT_IP", "")
-PORT = 9529
+DATAKIT_IP = get_env_var("DATAKIT_IP", "")
+DATAKIT_PORT = get_env_var("DATAKIT_PORT", 9529)
