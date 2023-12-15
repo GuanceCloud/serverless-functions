@@ -2,6 +2,7 @@ import os
 import logging
 
 logger = logging.getLogger()
+logger.setLevel(logging.getLevelName(os.environ.get("LOG_LEVEL", "INFO").upper()))
 
 
 def get_env_var(envvar, default, boolean=False):

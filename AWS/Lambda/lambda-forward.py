@@ -58,7 +58,7 @@ def push_dk(data):
     data = json.dumps(data)
     response = http.request("POST", f'{DATAKIT_IP}:{DATAKIT_PORT}/v1/write/logging', body=data,
                             headers={'Content-Type': 'application/json'})
-    print('dk_code:', response.status)
+    logger.info(f'dk_response_code:{response.status}')
 
 
 def to_datakit_data(event):
