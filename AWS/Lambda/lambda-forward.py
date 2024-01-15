@@ -167,6 +167,8 @@ def lambda_handler(event, context):
             events = s3_handler(event, context, metadata)
         elif event_type == "awslogs":
             events = awslogs_handler(event, context, metadata)
+        elif event_type == "events":
+            events = cwevent_handler(event, metadata)
 
     except Exception as e:
         err_message = "Error parsing the object. Exception: {} for event {}".format(
@@ -698,6 +700,22 @@ def s3_handler(event, context, metadata):
                 "message": line,
             }
             yield structured_line
+
+
+def cwevent_handler(event, metadata):
+    data = event
+
+    # Set the source on the log
+    source = data.pop("source", "cloudwatch")
+    service = source.split(".")
+    if len(service) > 1:
+        metadata[SOURCE] = service[1]
+    else:
+        metadata[SOURCE] = "cloudwatch"
+
+    metadata[SERVICE] = get_service_from_tags(metadata)
+
+    yield data
 
 
 def merge_dicts(a, b, path=None):
