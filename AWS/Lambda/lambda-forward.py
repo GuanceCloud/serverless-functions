@@ -19,8 +19,7 @@ from setting import (
     CUSTOM_TAGS,
     SERVICE,
     HOST,
-    DATAKIT_IP,
-    DATAKIT_PORT,
+    GUANCE_AGENT_CLI
 )
 
 logger = logging.getLogger()
@@ -53,18 +52,18 @@ cloudtrail_regex = re.compile(
 )
 
 
-def push_dk(data):
-    http = urllib3.PoolManager()
-    data = json.dumps(data)
-    response = http.request("POST", f'{DATAKIT_IP}:{DATAKIT_PORT}/v1/write/logging', body=data,
-                            headers={'Content-Type': 'application/json'})
-    logger.info(f'dk_response_code:{response.status}')
+def push_guance(cli, category, data):
+    res = cli.write_by_category_many(category, data)
+    logger.info(f'wirte_guance_response:{res}, write {len(data)} data')
+    
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(f'The first three data:\n{json_dumps_default(data[:3])}')
 
 
 def to_datakit_data(event):
     data = {
         'measurement': event.get('source'),
-        'time': round(time.time()),
+        'timestamp': round(time.time()),
         'tags': {
             # 'timestamp': (str(event.get('timestamp', round(time.time()))) + '000000000')
         },
@@ -181,7 +180,7 @@ def lambda_handler(event, context):
     for log in logs:
         dk_data = to_datakit_data(log)
         dk_data_list.append(dk_data)
-    push_dk(dk_data_list)
+    push_guance(GUANCE_AGENT_CLI, category='logging', data=dk_data_list)
 
 
 def convert_rule_to_nested_json(rule):
