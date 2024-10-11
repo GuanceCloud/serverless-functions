@@ -40,11 +40,11 @@ GUNACE_NODE_DATAWAY_URL = {
 def get_guance_agent_cli():
     cli = None
     if DATAKIT_IP:
-        cli = BaseDataKit(host=DATAKIT_IP, port=DATAKIT_PORT)
+        cli = BaseDataKit(host=DATAKIT_IP, port=DATAKIT_PORT, timeout=HTTP_TIMEOUT)
 
     elif GUANCE_TOKEN:
         dw_url = DATAWAY_URL or GUNACE_NODE_DATAWAY_URL.get(GUANCE_NODE)
-        cli = DataWay(url=f'{dw_url}?token={GUANCE_TOKEN}')
+        cli = DataWay(url=f'{dw_url}?token={GUANCE_TOKEN}', timeout=HTTP_TIMEOUT)
     
     if not cli:
         raise Exception("You must configure either environment variable `DATAKIT_IP` or (`GUANCE_NODE`, `GUANCE_TOKEN`)")
@@ -58,6 +58,7 @@ CUSTOM_TAGS = "tags"
 TAGS = get_env_var("TAGS", "")
 DATAKIT_IP = get_env_var("DATAKIT_IP", "")
 DATAKIT_PORT = get_env_var("DATAKIT_PORT", 9529)
+HTTP_TIMEOUT = int(get_env_var("HTTP_TIMEOUT", 5))
 DATAWAY_URL = get_env_var('DATAWAY_URL', '')
 GUANCE_NODE = get_env_var('GUANCE_NODE', 'aws')
 GUANCE_TOKEN = get_env_var('GUANCE_TOKEN', '')

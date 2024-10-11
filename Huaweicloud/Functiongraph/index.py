@@ -12,20 +12,6 @@ from setting import GUANCE_AGENT_CLI
 logger = logging.getLogger()
 
 
-class MyEncoder(json.JSONEncoder):
-
-    def default(self, obj):
-        """
-        判断是否为bytes类型的数据是的话转换成str
-        :param obj:
-        :return:
-        """
-        if isinstance(obj, bytes):
-            return str(obj, encoding='utf-8')
-
-        return pprint.saferepr(obj)
-
-
 def json_dumps_default(v):
     if isinstance(v, datetime.datetime):
         return datetime.datetime.fromtimestamp(v).strftime('%Y-%m-%dT%H:%M:%SZ')
