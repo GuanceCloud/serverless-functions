@@ -37,10 +37,10 @@ GUNACE_NODE_DATAWAY_URL = {
 def get_guance_agent_cli():
     cli = None
     if DATAKIT_IP:
-        cli = BaseDataKit(host=DATAKIT_IP, port=DATAKIT_PORT)
+        cli = BaseDataKit(host=DATAKIT_IP, port=DATAKIT_PORT, timeout=HTTP_TIMEOUT)
 
     elif GUANCE_TOKEN:
-        dw_url = DATAWAY_URL or GUNACE_NODE_DATAWAY_URL.get(GUANCE_NODE)
+        dw_url = DATAWAY_URL or GUNACE_NODE_DATAWAY_URL.get(GUANCE_NODE, timeout=HTTP_TIMEOUT)
         cli = DataWay(url=f'{dw_url}?token={GUANCE_TOKEN}')
     
     if not cli:
@@ -50,6 +50,7 @@ def get_guance_agent_cli():
 
 DATAKIT_IP = get_env_var("DATAKIT_IP", "")
 DATAKIT_PORT = get_env_var("DATAKIT_PORT", 9529)
+HTTP_TIMEOUT = int(get_env_var("HTTP_TIMEOUT", 5))
 DATAWAY_URL = get_env_var('DATAWAY_URL', '')
 GUANCE_NODE = get_env_var('GUANCE_NODE', 'default')
 GUANCE_TOKEN = get_env_var('GUANCE_TOKEN', '')
