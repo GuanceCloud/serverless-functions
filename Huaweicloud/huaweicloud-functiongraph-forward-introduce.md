@@ -21,7 +21,7 @@
 
 7.点击创建函数
 
-8.在 GitHub 中拉取同步代码至下方代码源中，并添加环境变量 DATAKIT_IP 为 datakit 部署地址，如果端口有改变，可加入环境变量 DATAKIT_PORT（默认 9529 ） 为对应的 IP，点击`部署`
+8.将 Huaweicloud/Functiongraph 目录下的所有脚本复制到代码源中，并添加环境变量 DATAKIT_IP 为 datakit 部署地址，如果端口有改变，可加入环境变量 DATAKIT_PORT（默认 9529 ） 为对应的 IP，点击`部署`
 
 9.点击 `添加触发器`
 
