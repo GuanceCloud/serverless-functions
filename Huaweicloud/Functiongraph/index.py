@@ -1,11 +1,13 @@
 import time
+import gzip
 import json
-import urllib3
+import urllib
 import base64
 import logging
 import pprint
-import os
-import urllib
+from datetime import datetime
+from io import BytesIO, BufferedReader
+
 import obs
 from setting import GUANCE_AGENT_CLI
 
@@ -79,8 +81,9 @@ def to_guance_point(event, event_type):
         if k == 'message':
             continue
 
-        if k == 'time' and event_type == 'lts':
+        if k == 'time':
             timestamp = v
+            continue
 
         if isinstance(v, (list, tuple, dict, set)):
             tags[k] = json_dumps(v)
@@ -107,20 +110,46 @@ def to_guance_point(event, event_type):
 
 
 def s3_handler(event, context):
-    bucket = event["Records"][0]["s3"]["bucket"]["name"]
-    key = urllib.parse.unquote_plus(event["Records"][0]["s3"]["object"]["key"])
-    region = event['Records'][0]['awsRegion']
+    event_data = event['data']
+    bucket = event_data['obs']['bucket']['name']
+    key = event_data['obs']['object']['key']
+    key = urllib.parse.unquote_plus(key)
+    region = event_data['eventRegion']
 
     access_key_id = context.getSecurityAccessKey()
     secret_access_key = context.getSecuritySecretKey()
     secret_token = context.getSecurityToken()
 
-    client = obs.ObsClient(access_key_id=access_key_id, secret_access_key=secret_access_key,
-                           server=f'https://obs.{region}.myhuaweicloud.com', security_token=secret_token)
+    client = obs.ObsClient(
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+        server=f'https://obs.{region}.myhuaweicloud.com',
+        security_token=secret_token
+    )
     response = client.getObject(bucketName=bucket, objectKey=key, loadStreamInMemory=True)
-    body = response["body"]
+    resp_status = response.status
+    if resp_status > 300:
+        erro_info = '--> !!! `obs.getObject` response status: {resp_status}, error code: {response.errorCode}, error message: {response.errorMessage}'
+        logger.error(erro_info)
+        raise Exception(erro_info)
 
-    return body
+    data = response.body.buffer
+    if key[-3:] == ".gz" or data[:2] == b"\x1f\x8b":
+        with gzip.GzipFile(fileobj=BytesIO(data)) as decompress_stream:
+            data = b"".join(BufferedReader(decompress_stream))
+    
+    data = data.decode("utf-8", errors="ignore")
+    split_data = data.splitlines()
+    
+    for line in split_data:
+        timestamp = int(time.time())
+        log = {
+            'message': line,
+            'time': timestamp,
+            'bucket_name': bucket,
+            'object_key': key
+        }
+        yield log
 
 
 def lts_handler(event, context):
@@ -135,40 +164,36 @@ def parse_event_type(event):
     """
     判断日志类型
     """
-    if "Records" in event and len(event["Records"]) > 0:
-        if "s3" in event["Records"][0]:
-            return "obs"
+    if data := event.get('data'):
+        if data.get('eventSource').upper() == 'OBS':
+            return 'obs'
 
     elif "lts" in event:
         return "lts"
+
     raise Exception("Event type not supported (see #Event supported section)")
 
 
 def handler(event, context):
-    event_type = "function_graph_forwarder"
-    try:
-        # 找到对应的解析器
-        event_type = parse_event_type(event)
-        if event_type == "obs":
-            logs = s3_handler(event, context)
-        elif event_type == "lts":
-            logs = lts_handler(event, context)
-        else:
-            logs = []
+    event_type = parse_event_type(event)
 
-    except Exception as e:
-        err_message = "Error parsing the object. Exception: {} for event {}".format(
-            str(e), event
-        )
-        return
+    logger.info(f'--> Event type: {event_type}')
+    if event_type == "obs":
+        logs = s3_handler(event, context)
+    elif event_type == "lts":
+        logs = lts_handler(event, context)
+    else:
+        logs = []
 
     if isinstance(logs, dict):
         logs = [logs]
 
     guance_points = []
-    logger.info(f'--> Event 中日志条数: {len(logs)}')
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f'--> 前 3 条 log 数据如下: \n{json_dumps_pretty(logs[:3])}')
+    if event_type == 'lts':
+        logger.info(f'--> Event 中日志条数: {len(logs)}')
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'--> 前 3 条 log 数据如下: \n{json_dumps_pretty(logs[:3])}')
 
     for log in logs:
         request_id = context.getRequestID()
