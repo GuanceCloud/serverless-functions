@@ -27,13 +27,13 @@ MULTILINE_LOG_REGEX_PATTERN = get_env_var(
 GUNACE_NODE_DATAWAY_URL = {
     'default': 'https://openway.guance.com',
     'aws': 'https://aws-openway.guance.com',
-    'cn3': 'https://cn3-openway.guance.com',
     'cn4': 'https://cn4-openway.guance.com',
-    'cn5': 'https://cn5-openway.guance.com',
     'us1': 'https://us1-openway.guance.com',
     'eu1': 'https://eu1-openway.guance.one',
     'ap1': 'https://ap1-openway.guance.one',
-    'cn6': 'https://cn6-openway.guance.one'
+    'cn6': 'https://cn6-openway.guance.one',
+    'za1': 'https://za1-openway.guance.one',
+    'id1': 'https://id1-openway.guance.one',
 }
 
 
