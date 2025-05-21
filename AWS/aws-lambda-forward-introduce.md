@@ -34,13 +34,22 @@
 
 8. 在 GitHub 中拉取同步代码至下方代码源中将 lambda-forward.py 内容复制到 lambda-function.py 中
 
-9. 在将 lambda-function.py 相同目录下新建 setting.py, datakit.py, dataway,py 文件，并将 GitHub 中相应文件代码复制进去
+9. 在将 lambda-function.py 相同目录下新建 setting.py、datakit.py、dataway.py 文件，并将 GitHub 中相应文件代码复制进去
 
 10. 添加环境变量
 
     1. DATAKIT_IP：datakit 部署的 ip 地址，上报数据源为 datakit，必选
     2. DATAKIT_PORT：datakit 服务端口，上报数据源为 datakit，非必选，默认：`9529`
-    3. GUANCE_NODE：观测云节点，上报数据源为 dataway，必选，选值范围：`default`， `aws`，`cn3`，`cn4`，`cn5`，`us1`，`eu1`，`ap1`，`cn6`
+    3. GUANCE_NODE：观测云节点，上报数据源为 dataway，必选，选值范围：
+       - `default`: 中国区 1（杭州）
+       - `aws`: 中国区 2（宁夏）
+       - `cn4`: 中国区 4（广州）
+       - `cn6`: 中国区 6（香港）
+       - `us1`: 美洲区 1（俄勒冈）
+       - `eu1`: 欧洲区 1（法兰克福）
+       - `ap1`: 亚太区 1（新加坡）
+       - `za1`: 非洲区 1（南非）
+       - `id1`: 印尼区 1（雅加达）
     4. GUANCE_TOKEN：观测云工作空间 `Token`，上报数据源为 dataway
 
     **注意：上报数据源 datakit 与 dataway 必选一个，选择 datakit 请配置`DATAKIT_IP`， 选择 dataway 请配置`GUANCE_NODE`、`GUANCE_TOKEN`**
@@ -68,11 +77,7 @@
 ### 操作所需最小权限
 
 logs: CreateLogGroup
-
 logs: CreateLogStream
-
 logs: PutLogEvents
-
 lambda: *
-
 AmazonS3ReadOnlyAccess
