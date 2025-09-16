@@ -305,24 +305,19 @@ class BaseDataKit(object):
                     k = re.sub(RE_ESCAPE_FIELD_KEY, ESCAPE_REPLACER, k)
 
                     if isinstance(v, string_types):
-                        # 字符串
                         v = re.sub(RE_ESCAPE_FIELD_STR_VALUE, ESCAPE_REPLACER, v)
                         v = '"{0}"'.format(ensure_str(v))
 
                     elif isinstance(v, bool):
-                        # 布尔值
                         v = '{0}'.format(v).lower()
 
                     elif isinstance(v, integer_types):
-                        # 整数
                         v = '{0}i'.format(v)
 
                     elif isinstance(v, float):
-                        # 小数
                         v = '{0}'.format(v)
 
                     elif isinstance(v, list):
-                        # 数组
                         elem_list = []
 
                         if len(v) > 0:
@@ -350,7 +345,6 @@ class BaseDataKit(object):
                         v = f"[{','.join(elem_list)}]"
 
                     else:
-                        # 不支持的类型
                         e = TypeError('Field `{0}` got an invalid data type. type(v)=`{1}`, repr(v)=`{2}`'.format(k, type(v), repr(v)))
                         raise e
 
@@ -566,18 +560,14 @@ class BaseDataKit(object):
             if v is not None:
                 q[k] = v
 
-        # 原始结果集
         status_code = None
         dql_res     = {}
 
-        # 翻页限制
         max_page_count = 1
         if all_series:
             if dql.strip().startswith('M::'):
-                # 指标类查询最多翻20页
                 max_page_count = 20
             else:
-                # 非指标类查询最多翻5页
                 max_page_count = 5
 
         for i in range(max_page_count):
@@ -588,7 +578,7 @@ class BaseDataKit(object):
             path = '/v1/query/raw'
             json_obj = {
                 'queries'     : [ q ],
-                'mask_visible': True, # 禁用敏感字段屏蔽
+                'mask_visible': True,
             }
 
             if token:
@@ -596,39 +586,30 @@ class BaseDataKit(object):
 
             status_code, _dql_res = self.post_json(path=path, json_obj=json_obj)
             if not isinstance(_dql_res, dict):
-                # 接收到非 JSON 响应，无法翻页，直接返回
                 return status_code, _dql_res
 
-            # 兼容处理 #
-            # 确保`series`为数组
             _dql_res['content'][0]['series'] = _dql_res['content'][0].get('series') or []
 
-            # 合并结果集
             if 'content' not in dql_res:
                 dql_res.update(_dql_res)
             else:
                 dql_res['content'][0]['series'].extend(_dql_res['content'][0]['series'])
 
             if not all_series:
-                # 非自动翻页直接退出
                 break
 
             else:
-                # 自动翻页时，获取全部时间线时，翻页结束时退出
                 if len(_dql_res['content'][0]['series']) < q['slimit']:
                     break
 
-        # 返回原始返回值
         if raw:
             return status_code, dql_res
 
-        # 解开包装
         dql_series = dql_res['content'][0]['series'] or []
         unpacked_dql_res = {
             'series': dql_series,
         }
 
-        # 结果集转换为字典格式
         if dict_output:
             dicted_series_list = []
             for series in dql_series:
@@ -640,7 +621,6 @@ class BaseDataKit(object):
                 for row in values:
                     d = dict(zip(columns, row))
 
-                    # 转换为字典后，可能某个字段名就叫`tags`，为避免冲突，属性`tags`自动加下划线
                     tags_field = 'tags'
                     while tags_field in d:
                         tags_field = '_' + tags_field
@@ -654,7 +634,6 @@ class BaseDataKit(object):
 
         return status_code, unpacked_dql_res
 
-    # 别名
     def write_point(self, *args, **kwargs):
         return self.write_metric(*args, **kwargs)
 

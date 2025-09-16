@@ -1,5 +1,7 @@
-# guance-serverless-functions
-Repo of Public Cloud functions that process streams and send data to Guance
+# serverless functions forward
+
+Repo of Public Cloud functions that process streams and send data to Guance/TrueWatch
 
 For AWS, [go here](./AWS)
+
 For Huaweicloud, [go here](./Huaweicloud)
