@@ -67,8 +67,10 @@
 
 ### 操作所需最小权限
 
+```
 logs: CreateLogGroup
 logs: CreateLogStream
 logs: PutLogEvents
 lambda: *
 AmazonS3ReadOnlyAccess
+```
