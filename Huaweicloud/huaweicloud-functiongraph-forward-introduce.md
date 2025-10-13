@@ -1,6 +1,6 @@
 # 采集器「HuaweiCloud-FunctionGraph」配置手册
 
-通过 华为云 中的 FunctionGraph 对 华为云 中的 LTS、OBS 日志数据进行抓取并上报到观测云日志中。
+通过 华为云 中的 FunctionGraph 对 华为云 中的 LTS、OBS 日志数据进行抓取并上报到可观测性平台日志中。
 
 ## 配置 FunctionGraph
 
@@ -21,13 +21,22 @@
 
 7.点击创建函数
 
-8.将 Huaweicloud/Functiongraph 目录下的所有脚本复制到代码源中，并添加环境变量 DATAKIT_IP 为 datakit 部署地址，如果端口有改变，可加入环境变量 DATAKIT_PORT（默认 9529 ） 为对应的 IP，点击`部署`
+8.将 Huaweicloud/Functiongraph 目录下的所有脚本复制到代码源中，添加环境变量，指定上报数据源：
 
-9.点击 `添加触发器`
+    1. DATAKIT_IP: datakit 部署的 ip 地址，上报数据源为 datakit
+    2. DATAKIT_PORT: datakit 服务端口，上报数据源为 datakit
+    3. DATAWAY_URL: dataway URL (Eg: https://xx-openway.xxx.com) 上报数据源为 dataway
+    4. WORKSPACE_TOKEN: 工作空间 `Token`，上报数据源为 dataway
 
-10.设置`触发器类型`为`云日志服务 (LTS)` 
+    **注意：上报数据源 datakit 与 dataway 必选一个，选择 datakit 请配置`DATAKIT_IP`， 选择 dataway 请配置`DATAWAY_URL`、`WORKSPACE_TOKEN`**
 
-11.选择需要监听的`日志组`，点击添加。
+1. 如果上报数据使用 datakit，且 datakit 端口不是默认的 `9529` 可添加环境变量 DATAKIT_PORT 填写为正确的端口
+
+10.点击 `添加触发器`
+
+11.设置`触发器类型`为`云日志服务 (LTS)` 
+
+12.选择需要监听的`日志组`，点击添加。
 
 ## X. 附录
 

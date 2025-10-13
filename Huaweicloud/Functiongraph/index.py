@@ -9,7 +9,7 @@ from datetime import datetime
 from io import BytesIO, BufferedReader
 
 import obs
-from setting import GUANCE_AGENT_CLI
+from setting import AGENT_CLI
 
 logger = logging.getLogger()
 
@@ -24,10 +24,6 @@ def json_dumps_default(v):
 
 
 def json_dumps(j, **kwargs):
-    '''
-    序列化JSON数据
-    如输入数据已经是str，会反序列化后重新序列化
-    '''
     if isinstance(j, str):
         j = json.loads(j)
 
@@ -35,23 +31,19 @@ def json_dumps(j, **kwargs):
 
 
 def json_dumps_pretty(j, **kwargs):
-    '''
-    美化方式输出序列化JSON数据
-    '''
     return json.dumps(j, sort_keys=True, indent=2, ensure_ascii=False, default=json_dumps_default, **kwargs)
 
 
-def push_guance(cli, category, data):
+def push_agent_cli(cli, category, data):
     res = cli.write_by_category_many(category, data)
-    logger.info(f'--> 响应：`{res}`')
-    logger.info(f'--> 写入 {category}: {len(data)}条数据')
+    logger.info(f'--> Response: `{res}`')
+    logger.info(f'--> Wrote: {len(data)} {category} points')
 
     if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f'--> 实际待写入前3条数据如下: \n{json_dumps_pretty(data[:3])}')
+        logger.debug(f'--> Top 3 pending data entries: \n{json_dumps_pretty(data[:3])}')
 
 
 def remove_blank_values(data):
-    # 去除tags中的空字符串、空白字符串内容
     for k in list(data['tags'].keys()):
         v = data['tags'][k].strip()
         if v == '':
@@ -59,11 +51,9 @@ def remove_blank_values(data):
         else:
             data['tags'][k] = v
 
-    # 去除fields中的空字符串、空白字符串内容
     for k in list(data['fields'].keys()):
         v = data['fields'][k]
 
-        # 仅在字符串内容时处理
         if isinstance(v, str):
             v = v.strip()
             if v == '':
@@ -74,7 +64,7 @@ def remove_blank_values(data):
     return data
 
 
-def to_guance_point(event, event_type):
+def to_obs_point(event, event_type):
     tags = {}
     timestamp = round(time.time() * 1000) # ms
     for k, v in event.items():
@@ -161,9 +151,6 @@ def lts_handler(event, context):
 
 
 def parse_event_type(event):
-    """
-    判断日志类型
-    """
     if data := event.get('data'):
         if data.get('eventSource').upper() == 'OBS':
             return 'obs'
@@ -188,19 +175,19 @@ def handler(event, context):
     if isinstance(logs, dict):
         logs = [logs]
 
-    guance_points = []
+    obs_points = []
     if event_type == 'lts':
-        logger.info(f'--> Event 中日志条数: {len(logs)}')
+        logger.info(f'--> Number of logs in Event: {len(logs)}')
 
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f'--> 前 3 条 log 数据如下: \n{json_dumps_pretty(logs[:3])}')
+            logger.debug(f'--> Top 3 event log data: \n{json_dumps_pretty(logs[:3])}')
 
     for log in logs:
         request_id = context.getRequestID()
         function_name = context.getFunctionName()
         log['functiongraph_request_id'] = request_id
         log['functiongraph_function_name'] = function_name
-        data = to_guance_point(log, event_type)
-        guance_points.append(data)
-    push_guance(GUANCE_AGENT_CLI, category='logging', data=guance_points)
+        data = to_obs_point(log, event_type)
+        obs_points.append(data)
+    push_agent_cli(AGENT_CLI, category='logging', data=obs_points)
 
